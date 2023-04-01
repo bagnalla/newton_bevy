@@ -7,6 +7,7 @@ use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin}
 };
 
+#[derive(Resource)]
 struct State {
     cam_speed: f32
 }
@@ -30,9 +31,15 @@ struct Mass(f32);
 
 struct Collision(Entity, Entity);
 
+#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
+enum Sets {
+    Move,
+    Collision
+}
+
 fn main() {
     App::new()
-        .insert_resource(Msaa { samples: 4 })
+	.insert_resource(Msaa::Sample4)
 	.init_resource::<State>()
 	.insert_resource(ClearColor(Color::BLACK))
 	.add_event::<Collision>()
@@ -43,10 +50,10 @@ fn main() {
         .add_startup_system(setup_camera)
 	.add_startup_system(setup_bodies)
 	.add_system(update_camera)
-	.add_system(move_system.label("move"))
-	.add_system(collision_system.label("collision").after("move"))
-	.add_system(gravity_system.after("move"))
-	.add_system(collision_handler_system.after("collision"))
+	.add_system(move_system.in_set(Sets::Move))
+	.add_system(collision_system.in_set(Sets::Collision).after(Sets::Move))
+	.add_system(gravity_system.after(Sets::Move))
+	.add_system(collision_handler_system.after(Sets::Collision))
         .run();
 }
 
@@ -59,7 +66,7 @@ fn setup_light(mut commands: Commands) {
 }
 
 fn setup_camera(mut commands: Commands) {
-    commands.spawn_bundle(PerspectiveCameraBundle {
+    commands.spawn(Camera3dBundle {
         // transform: Transform::from_xyz(0.0, 0.0, 5.0)
 	transform: Transform::from_xyz(0.0, 0.0, 25.0)
             .looking_at(Vec3::ZERO, Vec3::Y),
@@ -71,16 +78,16 @@ fn setup_bodies(mut commands: Commands,
 		mut meshes: ResMut<Assets<Mesh>>,
 		mut materials: ResMut<Assets<StandardMaterial>>) {
 
-    let sphere_handle = meshes.add(Mesh::from(shape::Icosphere {
+    let sphere_handle = meshes.add(Mesh::try_from(shape::Icosphere {
 	radius: 1.0,
 	subdivisions: 4
-    }));
+    }).unwrap());
     let sphere_material_handle = materials.add(StandardMaterial {
 	base_color: Color::rgb(0.8, 0.7, 0.6),
 	..Default::default()
     });
 
-    commands.spawn_bundle(PbrBundle {
+    commands.spawn(PbrBundle {
 	..Default::default()
     })
 	.with_children(|u| {
@@ -90,7 +97,7 @@ fn setup_bodies(mut commands: Commands,
 	    // and velocities.
 	    let radius = 1.0;
 	    let volume = 4.0 * std::f32::consts::PI * f32::powf(radius, 3.0) / 3.0;
-	    u.spawn_bundle(PbrBundle {
+	    u.spawn(PbrBundle {
 	    	mesh: sphere_handle.clone(),
 	    	material: sphere_material_handle.clone(),
 	    	transform: Transform::from_scale(Vec3::splat(radius))
@@ -101,7 +108,7 @@ fn setup_bodies(mut commands: Commands,
 	    	.insert(Mass(volume))
 	    	.insert(Radius(radius));
 
-	    u.spawn_bundle(PbrBundle {
+	    u.spawn(PbrBundle {
 	    	mesh: sphere_handle.clone(),
 	    	material: sphere_material_handle.clone(),
 	    	transform: Transform::from_scale(Vec3::splat(radius))
@@ -118,7 +125,7 @@ fn setup_bodies(mut commands: Commands,
 	    	let speed = 1.0;
 	    	let radius = 0.01 + 0.1 * rng.gen::<f32>();
 		let volume = 4.0 * std::f32::consts::PI * f32::powf(radius, 3.0) / 3.0;
-	    	u.spawn_bundle(PbrBundle {
+	    	u.spawn(PbrBundle {
 	    	    mesh: sphere_handle.clone(),
 	    	    material: sphere_material_handle.clone(),
 	    	    transform: Transform::from_scale(Vec3::splat(radius))
@@ -192,8 +199,8 @@ fn move_system(time: Res<Time>,
 fn collision_system(query: Query<(Entity, &Transform, &Radius)>,
 		    mut collisions: EventWriter<Collision>) {
     for [(a_id, a_transform, &Radius(a_radius)),
-	 (b_id, b_transform, &Radius(b_radius))] in query.iter_combinations() {
-	let v = a_transform.translation - b_transform.translation;
+    	 (b_id, b_transform, &Radius(b_radius))] in query.iter_combinations() {
+    	let v = a_transform.translation - b_transform.translation;
     	let d = a_radius + b_radius - v.length();
     	if d > 0.0 {
     	    collisions.send(Collision(a_id, b_id))

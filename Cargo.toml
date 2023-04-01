@@ -6,7 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# bevy = "0.6.1"
-# use dynamic linking for faster compile times, undo for release
-bevy = { version = "0.6.1", features = ["dynamic"] }
+bevy = "0.10.1"
 rand = "0.8.5"
+tracing = "0.1.37"
+tracing-subscriber = "0.3.16"
+crossbeam-channel = "0.5.7"
